@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShopBill — Billing & Invoices</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#687386;--line:#e2e7ef;--brand:#2157d5;--brand2:#163e9e;--danger:#b42318;--good:#087443}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{background:#142447;color:#fff;padding:16px max(16px,calc((100% - 1180px)/2));display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.brand{font-size:22px;font-weight:800;letter-spacing:.2px}.brand small{display:block;font-size:12px;font-weight:500;color:#c9d6f2}
+.header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:1180px;margin:22px auto;padding:0 14px 40px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+button,.button{border:0;border-radius:9px;background:var(--brand);color:#fff;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer}
+button:hover,.button:hover{background:var(--brand2)}button.secondary{background:#e9eef9;color:#233b70}button.danger{background:#fff0ef;color:var(--danger)}button:disabled{opacity:.5;cursor:not-allowed}
+.tab{background:#e9edf5;color:#34425d}.tab.active{background:var(--brand);color:#fff}
+.grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.7fr);gap:16px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 2px 8px #15264a08;margin-bottom:16px}
+h1,h2,h3{margin:0 0 14px}h1{font-size:24px}h2{font-size:18px}h3{font-size:15px}
+.muted{color:var(--muted);font-size:13px}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}
+label{display:block;font-size:13px;color:#4a566b;font-weight:650;margin:0 0 5px}
+input,textarea,select{width:100%;padding:10px 11px;border:1px solid #cfd7e5;border-radius:8px;font:inherit;background:#fff;color:var(--ink)}
+textarea{min-height:72px;resize:vertical}.field{margin-bottom:12px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);vertical-align:middle}th{font-size:12px;color:#5b6678;text-transform:uppercase;letter-spacing:.03em}
+.items-wrap{overflow-x:auto}.items-table input{min-width:80px;padding:8px}.items-table .item-name{min-width:160px}
+.items-table .qty{width:80px}.items-table .rate{width:110px}.items-table .amount{white-space:nowrap;font-weight:700}
+.summary{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}.summary div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}.summary .total{font-size:20px;font-weight:850;border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
+.status{display:inline-block;border-radius:20px;padding:4px 8px;background:#fff2cc;color:#7a4a00;font-size:12px;font-weight:700}.status.paid{background:#dff7e9;color:#08643b}.status.partial{background:#e4efff;color:#214c9b}
+.notice{padding:11px 13px;border-radius:9px;background:#eef4ff;color:#23447e;font-size:13px;margin-bottom:14px}
+.error{color:var(--danger);font-size:13px;white-space:pre-wrap}.success{color:var(--good);font-size:13px}
+.hidden{display:none!important}.auth{max-width:460px;margin:40px auto}.bill-list{display:flex;flex-direction:column;gap:10px}.bill-item{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.bill-item strong{display:block}.bill-actions{display:flex;gap:6px;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px}.kpi span{display:block;color:var(--muted);font-size:12px}.kpi strong{display:block;font-size:22px;margin-top:3px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#142447;color:#fff;padding:11px 16px;border-radius:10px;box-shadow:0 4px 20px #0002;z-index:20;max-width:90%;display:none}
+#invoicePrint{display:none}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.kpi strong{font-size:17px}main{margin-top:14px}.card{padding:14px}}
+@media(max-width:480px){.kpis{grid-template-columns:1fr}.row>*{min-width:100%}.header-actions button{padding:8px 10px}.brand{font-size:20px}}
+@page{size:A4;margin:12mm}
+@media print{
+  body{background:#fff!important;color:#000!important;font-size:12px}
+  body *{visibility:hidden!important}
+  #invoicePrint,#invoicePrint *{visibility:visible!important}
+  #invoicePrint{display:block!important;position:absolute;left:0;top:0;width:100%;padding:0}
+  .print-head{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px;gap:20px}
+  .print-head h1{font-size:23px;margin:0 0 5px}.print-head p{margin:2px 0}
+  .print-meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+  #invoicePrint table{width:100%;border-collapse:collapse;margin-top:15px}
+  #invoicePrint th,#invoicePrint td{border-bottom:1px solid #ccc;padding:8px 6px;color:#000}
+  #invoicePrint th{background:#f0f0f0!important}
+  .print-totals{width:270px;margin:14px 0 0 auto}
+  .print-totals div{display:flex;justify-content:space-between;padding:4px}
+  .print-totals .grand{font-size:17px;font-weight:bold;border-top:2px solid #222;margin-top:5px;padding-top:8px}
+  .print-footer{border-top:1px solid #bbb;margin-top:35px;padding-top:10px;display:flex;justify-content:space-between}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">ShopBill <small>Billing • Print • Cloud Sync</small></div>
+  <div class="header-actions">
+    <span id="connectionStatus" class="muted" style="color:#d7e2ff">Not connected</span>
+    <button id="settingsBtn" class="secondary">Cloud Setup</button>
+    <button id="logoutBtn" class="secondary hidden">Log out</button>
+  </div>
+</header>
+
+<main>
+  <section id="setupPanel" class="card">
+    <h2>Connect your cloud database</h2>
+    <div class="notice">To sync bills between your laptop and phone, connect a Supabase project first. Your database credentials are saved in this browser only. Use the project's public anon/publishable key—not a service-role secret.</div>
+    <div class="row">
+      <div class="field"><label for="supabaseUrl">Supabase Project URL</label><input id="supabaseUrl" placeholder="https://your-project.supabase.co" autocomplete="url"></div>
+      <div class="field"><label for="supabaseKey">Publishable / anon key</label><input id="supabaseKey" placeholder="sb_publishable_... or eyJ..." autocomplete="off"></div>
+    </div>
+    <div class="row"><button id="connectBtn">Connect</button><button id="showInstructionsBtn" class="secondary">Setup instructions</button></div>
+    <p id="setupMessage" class="muted"></p>
+    <div id="instructions" class="notice hidden">
+      <strong>One-time setup:</strong>
+      <ol>
+        <li>Create a free project at <b>supabase.com</b>.</li>
+        <li>Open SQL Editor and run the included <code>schema.sql</code> file.</li>
+        <li>Open Project Settings → API (or Connect) and copy the Project URL and publishable/anon key.</li>
+        <li>Paste them above, connect, then create an account below.</li>
+        <li>Open this app on your other device and enter the same URL/key and sign in with the same account.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="authPanel" class="card auth hidden">
+    <h2>Sign in to ShopBill</h2>
+    <p class="muted">Use the same account on your laptop and mobile.</p>
+    <div class="field"><label>Email</label><input id="email" type="email" autocomplete="email" placeholder="you@example.com"></div>
+    <div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" minlength="8" placeholder="At least 8 characters"></div>
+    <div class="row"><button id="signInBtn">Sign in</button><button id="signUpBtn" class="secondary">Create account</button></div>
+    <p id="authMessage" class="muted"></p>
+  </section>
+
+  <section id="appPanel" class="hidden">
+    <div class="tabs">
+      <button class="tab active" data-tab="newBill">＋ New Bill</button>
+      <button class="tab" data-tab="history">Bill History</button>
+      <button class="tab" data-tab="business">Business Profile</button>
+    </div>
+    <div id="newBill" class="tab-panel">
+      <div class="grid">
+        <div class="card">
+          <h1>Create Bill</h1>
+          <p class="muted">Fill in the bill details. Save first, then print on A4 paper or download as PDF from the print dialog.</p>
+          <div class="row">
+            <div class="field"><label>Bill number</label><input id="billNo" placeholder="Auto-generated"></div>
+            <div class="field"><label>Bill date</label><input id="billDate" type="date"></div>
+          </div>
+          <h3>Customer details</h3>
+          <div class="row">
+            <div class="field"><label>Customer name *</label><input id="customerName" placeholder="Customer / company name"></div>
+            <div class="field"><label>Mobile number</label><input id="customerPhone" inputmode="tel" placeholder="Optional"></div>
+          </div>
+          <div class="field"><label>Customer address</label><textarea id="customerAddress" placeholder="Optional address"></textarea></div>
+          <div class="items-wrap">
+            <table class="items-table">
+              <thead><tr><th>Product / service</th><th>Qty</th><th>Rate (₹)</th><th>Amount</th><th></th></tr></thead>
+              <tbody id="itemRows"></tbody>
+            </table>
+          </div>
+          <div class="row" style="margin-top:10px"><button id="addItemBtn" class="secondary">＋ Add item</button></div>
+          <div class="row" style="margin-top:16px">
+            <div class="field"><label>Discount (₹)</label><input id="discount" type="number" min="0" step="0.01" value="0"></div>
+            <div class="field"><label>Tax / GST rate (%)</label><input id="taxRate" type="number" min="0" max="100" step="0.01" value="0"></div>
+            <div class="field"><label>Amount paid (₹)</label><input id="paidAmount" type="number" min="0" step="0.01" value="0"></div>
+          </div>
+          <div class="field"><label>Notes / payment terms</label><textarea id="notes" placeholder="Thank you for your business."></textarea></div>
+          <div class="row"><button id="saveBillBtn">Save Bill to Cloud</button><button id="clearBtn" class="secondary">Clear form</button></div>
+          <p id="billMessage" class="muted"></p>
+        </div>
+        <aside>
+          <div class="card">
+            <h2>Bill total</h2>
+            <div class="summary">
+              <div>Subtotal</div><div id="subtotalView">₹0.00</div>
+              <div>Discount</div><div id="discountView">− ₹0.00</div>
+              <div>Tax</div><div id="taxView">₹0.00</div>
+              <div class="total">Grand total</div><div class="total" id="totalView">₹0.00</div>
+              <div>Paid</div><div id="paidView">₹0.00</div>
+              <div>Balance due</div><div id="balanceView">₹0.00</div>
+            </div>
+            <p class="muted" style="margin-top:14px">Tax is calculated on subtotal after discount. Set tax rate to 0 for a non-tax bill. Verify the correct tax treatment before issuing invoices.</p>
+          </div>
+          <div class="card">
+            <h2>Business profile</h2>
+            <p id="profileSummary" class="muted">Add your shop details under Business Profile. These details appear on printed bills.</p>
+            <button class="secondary" id="profileShortcut">Edit profile</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div id="history" class="tab-panel hidden">
+      <div class="card">
+        <div class="row" style="align-items:center"><div><h1>Bill History</h1><p class="muted">Saved bills from your cloud database.</p></div><div style="text-align:right"><button id="refreshBtn" class="secondary">Refresh</button></div></div>
+        <div class="kpis">
+          <div class="kpi"><span>Bills found</span><strong id="kpiCount">0</strong></div>
+          <div class="kpi"><span>Total billed</span><strong id="kpiSales">₹0</strong></div>
+          <div class="kpi"><span>Outstanding</span><strong id="kpiDue">₹0</strong></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Search bills</label><input id="historySearch" placeholder="Bill no, customer, phone"></div>
+          <div class="field"><label>From date</label><input id="fromDate" type="date"></div>
+          <div class="field"><label>To date</label><input id="toDate" type="date"></div>
+        </div>
+        <div id="billList" class="bill-list"></div>
+        <p id="historyMessage" class="muted"></p>
+      </div>
+    </div>
+
+    <div id="business" class="tab-panel hidden">
+      <div class="card">
+        <h1>Business Profile</h1>
+        <p class="muted">These details are stored in this browser and printed on bills. Enter the same details on each device.</p>
+        <div class="row">
+          <div class="field"><label>Shop / business name *</label><input id="shopName" placeholder="Your shop name"></div>
+          <div class="field"><label>Phone</label><input id="shopPhone" placeholder="Business phone"></div>
+        </div>
+        <div class="field"><label>Address</label><textarea id="shopAddress" placeholder="Shop address"></textarea></div>
+        <div class="row">
+          <div class="field"><label>GSTIN (optional)</label><input id="shopGstin" placeholder="GST identification number"></div>
+          <div class="field"><label>Invoice footer</label><input id="shopFooter" placeholder="Thank you for your business"></div>
+        </div>
+        <button id="saveProfileBtn">Save business profile</button>
+        <p id="profileMessage" class="muted"></p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="invoicePrint"></div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const money = n => '₹' + (Number(n || 0)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const today = () => new Date().toLocaleDateString('en-CA');
+  let supabase = null, currentUser = null, bills = [], editingId = null, realtimeChannel = null;
+  const config = () => ({url:localStorage.getItem('shopbill_supabase_url')||'', key:localStorage.getItem('shopbill_supabase_key')||''});
+  const profile = () => { try{return JSON.parse(localStorage.getItem('shopbill_profile')||'{}')}catch{return {}} };
+  const showToast = msg => { $('toast').textContent=msg; $('toast').style.display='block'; setTimeout(()=>{$('toast').style.display='none'},2800); };
+  const setText = (id,msg) => { $(id).textContent=msg||''; };
+  function setConnection(msg,good=false){$('connectionStatus').textContent=msg;$('connectionStatus').style.color=good?'#a8f0c6':'#d7e2ff';}
+  function showSetup(){ $('setupPanel').classList.remove('hidden'); $('authPanel').classList.add('hidden'); $('appPanel').classList.add('hidden'); }
+  function showAuth(){ $('setupPanel').classList.add('hidden'); $('authPanel').classList.remove('hidden'); $('appPanel').classList.add('hidden'); $('logoutBtn').classList.add('hidden'); }
+  function showApp(){ $('setupPanel').classList.add('hidden'); $('authPanel').classList.add('hidden'); $('appPanel').classList.remove('hidden'); $('logoutBtn').classList.remove('hidden'); }
+  function initClient(){
+    const c=config();
+    if(!c.url||!c.key||!window.supabase){supabase=null;return false;}
+    try{supabase=window.supabase.createClient(c.url,c.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return true;}
+    catch(e){setText('setupMessage','Could not initialize Supabase: '+e.message);return false;}
+  }
+  async function connect(){
+    const url=$('supabaseUrl').value.trim().replace(/\/$/,''), key=$('supabaseKey').value.trim();
+    if(!/^https:\/\/[a-zA-Z0-9.-]+$/.test(url)||!key){setText('setupMessage','Enter a valid HTTPS Supabase Project URL and the public anon/publishable key.');return;}
+    localStorage.setItem('shopbill_supabase_url',url);localStorage.setItem('shopbill_supabase_key',key);
+    if(!initClient())return;
+    setText('setupMessage','Checking connection…');
+    const {data,error}=await supabase.auth.getSession();
+    if(error){setText('setupMessage','Connection error: '+error.message);return;}
+    setConnection('Cloud configured',true);
+    setText('setupMessage','Connected to Supabase. Sign in or create an account below.');
+    showAuth();
+    if(data.session) await onSession(data.session);
+  }
+  async function signUp(){
+    const email=$('email').value.trim(), password=$('password').value;
+    if(!email||password.length<8){setText('authMessage','Enter a valid email and password with at least 8 characters.');return;}
+    const {data,error}=await supabase.auth.signUp({email,password});
+    if(error){setText('authMessage',error.message);return;}
+    if(data.session){setText('authMessage','Account created.');await onSession(data.session);}
+    else setText('authMessage','Account created. Check your email for a confirmation link, then sign in. If email confirmation is disabled in your Supabase project, sign in now.');
+  }
+  async function signIn(){
+    const email=$('email').value.trim(), password=$('password').value;
+    const {data,error}=await supabase.auth.signInWithPassword({email,password});
+    if(error){setText('authMessage',error.message);return;}
+    await onSession(data.session);
+  }
+  async function onSession(session){
+    currentUser=session?.user||null;
+    if(!currentUser){showAuth();return;}
+    showApp();setConnection('Signed in • cloud sync on',true);
+    loadProfile();resetForm();await loadBills();subscribeRealtime();
+  }
+  async function logout(){if(realtimeChannel)await supabase.removeChannel(realtimeChannel);await supabase.auth.signOut();currentUser=null;bills=[];showAuth();setConnection('Signed out');}
+  function subscribeRealtime(){
+    if(realtimeChannel)supabase.removeChannel(realtimeChannel);
+    realtimeChannel=supabase.channel('shopbill-invoices-'+currentUser.id)
+      .on('postgres_changes',{event:'*',schema:'public',table:'invoices',filter:'user_id=eq.'+currentUser.id},()=>loadBills(true))
+      .subscribe(status=>{if(status==='SUBSCRIBED')setConnection('Live cloud sync on',true);});
+  }
+  function loadProfile(){
+    const p=profile();$('shopName').value=p.name||'';$('shopPhone').value=p.phone||'';$('shopAddress').value=p.address||'';$('shopGstin').value=p.gstin||'';$('shopFooter').value=p.footer||'Thank you for your business.';
+    $('profileSummary').textContent=p.name?`${p.name}${p.phone?' • '+p.phone:''}`:'Add your shop details under Business Profile. These details appear on printed bills.';
+  }
+  function saveProfile(){
+    const p={name:$('shopName').value.trim(),phone:$('shopPhone').value.trim(),address:$('shopAddress').value.trim(),gstin:$('shopGstin').value.trim(),footer:$('shopFooter').value.trim()};
+    localStorage.setItem('shopbill_profile',JSON.stringify(p));loadProfile();setText('profileMessage','Profile saved on this device. Repeat on your other device.');showToast('Business profile saved');
+  }
+  function addItem(item={name:'',qty:1,rate:0}){
+    const tr=document.createElement('tr');tr.className='item-row';
+    tr.innerHTML=`<td><input class="item-name" aria-label="Product name" placeholder="Product name"></td><td><input class="qty" aria-label="Quantity" type="number" min="0.001" step="any" value="1"></td><td><input class="rate" aria-label="Rate" type="number" min="0" step="0.01" value="0"></td><td class="amount">₹0.00</td><td><button type="button" class="danger remove-item" aria-label="Remove item">×</button></td>`;
+    tr.querySelector('.item-name').value=item.name||'';tr.querySelector('.qty').value=item.qty??1;tr.querySelector('.rate').value=item.rate??0;
+    tr.querySelectorAll('input').forEach(el=>el.addEventListener('input',calculate));
+    tr.querySelector('.remove-item').addEventListener('click',()=>{tr.remove();if(!$('itemRows').children.length)addItem();calculate();});
+    $('itemRows').appendChild(tr);calculate();
+  }
+  function getItems(){
+    return [...document.querySelectorAll('.item-row')].map(tr=>({name:tr.querySelector('.item-name').value.trim(),qty:Number(tr.querySelector('.qty').value)||0,rate:Number(tr.querySelector('.rate').value)||0}))
+      .filter(x=>x.name&&x.qty>0);
+  }
+  function calculate(){
+    let subtotal=0;
+    document.querySelectorAll('.item-row').forEach(tr=>{const q=Number(tr.querySelector('.qty').value)||0,r=Number(tr.querySelector('.rate').value)||0,a=q*r;tr.querySelector('.amount').textContent=money(a);subtotal+=a;});
+    const discount=Math.max(0,Number($('discount').value)||0), taxRate=Math.max(0,Math.min(100,Number($('taxRate').value)||0)), paid=Math.max(0,Number($('paidAmount').value)||0);
+    const taxable=Math.max(0,subtotal-discount), tax=taxable*taxRate/100,total=taxable+tax,balance=Math.max(0,total-paid);
+    setText('subtotalView',money(subtotal));setText('discountView','− '+money(discount));setText('taxView',money(tax));setText('totalView',money(total));setText('paidView',money(paid));setText('balanceView',money(balance));
+    return {items:getItems(),subtotal,discount,tax_rate:taxRate,tax_amount:tax,total,paid,balance};
+  }
+  function nextBillNo(){
+    const date=today().replaceAll('-','');const rand=Math.random().toString(36).slice(2,6).toUpperCase();
+    return 'INV-'+date+'-'+rand;
+  }
+  function resetForm(){
+    editingId=null;$('billNo').value=nextBillNo();$('billDate').value=today();$('customerName').value='';$('customerPhone').value='';$('customerAddress').value='';
+    $('discount').value='0';$('taxRate').value='0';$('paidAmount').value='0';$('notes').value='';$('itemRows').innerHTML='';addItem();setText('billMessage','');$('saveBillBtn').textContent='Save Bill to Cloud';calculate();
+  }
+  async function saveBill(){
+    if(!currentUser||!supabase){setText('billMessage','Connect and sign in first.');return;}
+    const c=calculate(), customer=$('customerName').value.trim(), invoiceNo=$('billNo').value.trim()||nextBillNo(), date=$('billDate').value||today();
+    if(!customer){setText('billMessage','Customer name is required.');return;}
+    if(!c.items.length){setText('billMessage','Add at least one product with a name and positive quantity.');return;}
+    if(c.discount>c.subtotal){setText('billMessage','Discount cannot exceed subtotal.');return;}
+    if(c.paid>c.total+0.005){setText('billMessage','Amount paid cannot exceed the bill total.');return;}
+    const payload={user_id:currentUser.id,invoice_no:invoiceNo,customer_name:customer,customer_phone:$('customerPhone').value.trim(),customer_address:$('customerAddress').value.trim(),invoice_date:date,items:c.items,subtotal:c.subtotal,discount:c.discount,tax_rate:c.tax_rate,tax_amount:c.tax_amount,total:c.total,paid:c.paid,notes:$('notes').value.trim()};
+    $('saveBillBtn').disabled=true;setText('billMessage','Saving to cloud…');
+    let result;
+    if(editingId) result=await supabase.from('invoices').update(payload).eq('id',editingId).select().single();
+    else result=await supabase.from('invoices').insert(payload).select().single();
+    $('saveBillBtn').disabled=false;
+    if(result.error){setText('billMessage','Could not save: '+result.error.message);return;}
+    setText('billMessage','Bill saved to cloud.');showToast('Bill saved');
+    await loadBills(true);renderPrint(result.data);if(confirm('Bill saved. Open print dialog now?'))window.print();resetForm();
+  }
+  async function loadBills(silent=false){
+    if(!supabase||!currentUser)return;
+    if(!silent)setText('historyMessage','Loading bills…');
+    const {data,error}=await supabase.from('invoices').select('*').order('invoice_date',{ascending:false}).order('created_at',{ascending:false}).limit(1000);
+    if(error){setText('historyMessage','Could not load bills: '+error.message);return;}
+    bills=data||[];renderHistory();if(!silent)setText('historyMessage',bills.length?'':'No saved bills yet.');
+  }
+  function statusFor(b){if(Number(b.paid)>=Number(b.total)-0.005)return ['Paid','paid'];if(Number(b.paid)>0)return ['Part paid','partial'];return ['Unpaid',''];}
+  function renderHistory(){
+    const q=$('historySearch').value.trim().toLowerCase(), from=$('fromDate').value, to=$('toDate').value;
+    const filtered=bills.filter(b=>(!q||[b.invoice_no,b.customer_name,b.customer_phone].some(x=>(x||'').toLowerCase().includes(q)))&&(!from||b.invoice_date>=from)&&(!to||b.invoice_date<=to));
+    $('kpiCount').textContent=filtered.length.toLocaleString('en-IN');
+    $('kpiSales').textContent=money(filtered.reduce((s,b)=>s+Number(b.total||0),0));
+    $('kpiDue').textContent=money(filtered.reduce((s,b)=>s+Math.max(0,Number(b.total||0)-Number(b.paid||0)),0));
+    const list=$('billList');list.innerHTML='';
+    if(!filtered.length){list.innerHTML='<p class="muted">No bills match your search.</p>';return;}
+    filtered.forEach(b=>{
+      const [status,cls]=statusFor(b), el=document.createElement('div');el.className='bill-item';
+      const info=document.createElement('div');info.innerHTML=`<strong>${escapeHtml(b.invoice_no)} · ${escapeHtml(b.customer_name)}</strong><span class="muted">${escapeHtml(b.invoice_date)}${b.customer_phone?' · '+escapeHtml(b.customer_phone):''} · ${money(b.total)}</span><div style="margin-top:5px"><span class="status ${cls}">${status}</span> <span class="muted">Due ${money(Math.max(0,Number(b.total)-Number(b.paid)))}</span></div>`;
+      const actions=document.createElement('div');actions.className='bill-actions';
+      const printBtn=document.createElement('button');printBtn.className='secondary';printBtn.textContent='Print / PDF';printBtn.onclick=()=>{renderPrint(b);window.print();};
+      const editBtn=document.createElement('button');editBtn.className='secondary';editBtn.textContent='Edit';editBtn.onclick=()=>editBill(b);
+      const deleteBtn=document.createElement('button');deleteBtn.className='danger';deleteBtn.textContent='Delete';deleteBtn.onclick=()=>deleteBill(b);
+      actions.append(printBtn,editBtn,deleteBtn);el.append(info,actions);list.appendChild(el);
+    });
+  }
+  function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function editBill(b){
+    editingId=b.id;$('billNo').value=b.invoice_no;$('billDate').value=b.invoice_date;$('customerName').value=b.customer_name||'';$('customerPhone').value=b.customer_phone||'';$('customerAddress').value=b.customer_address||'';
+    $('discount').value=b.discount||0;$('taxRate').value=b.tax_rate||0;$('paidAmount').value=b.paid||0;$('notes').value=b.notes||'';
+    $('itemRows').innerHTML='';(b.items||[]).forEach(addItem);if(!(b.items||[]).length)addItem();
+    $('saveBillBtn').textContent='Update Bill in Cloud';setText('billMessage','Editing '+b.invoice_no+'. Save to update.');switchTab('newBill');window.scrollTo({top:0,behavior:'smooth'});
+  }
+  async function deleteBill(b){
+    if(!confirm(`Delete ${b.invoice_no}? This cannot be undone.`))return;
+    const {error}=await supabase.from('invoices').delete().eq('id',b.id);
+    if(error){showToast('Delete failed: '+error.message);return;}
+    showToast('Bill deleted');await loadBills(true);
+  }
+  function renderPrint(b){
+    const p=profile(), items=b.items||[], total=Number(b.total)||0, paid=Number(b.paid)||0;
+    const itemRows=items.map((it,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(it.name)}</td><td style="text-align:right">${Number(it.qty).toLocaleString('en-IN')}</td><td style="text-align:right">${money(it.rate)}</td><td style="text-align:right">${money(Number(it.qty)*Number(it.rate))}</td></tr>`).join('');
+    $('invoicePrint').innerHTML=`
+      <div class="print-head"><div><h1>${escapeHtml(p.name||'Your Shop Name')}</h1><p>${escapeHtml(p.address||'')}</p><p>${p.phone?'Phone: '+escapeHtml(p.phone):''}</p><p>${p.gstin?'GSTIN: '+escapeHtml(p.gstin):''}</p></div><div style="text-align:right"><h1>INVOICE</h1><p><b>Bill No:</b> ${escapeHtml(b.invoice_no)}</p><p><b>Date:</b> ${escapeHtml(b.invoice_date)}</p></div></div>
+      <div class="print-meta"><div><b>Bill To</b><p>${escapeHtml(b.customer_name)}</p><p>${escapeHtml(b.customer_phone||'')}</p><p>${escapeHtml(b.customer_address||'')}</p></div><div><b>Payment status</b><p>${escapeHtml(statusFor(b)[0])}</p><p>Amount paid: ${money(paid)}</p><p>Balance due: ${money(Math.max(0,total-paid))}</p></div></div>
+      <table><thead><tr><th>#</th><th>Product / service</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
+      <div class="print-totals"><div><span>Subtotal</span><b>${money(b.subtotal)}</b></div><div><span>Discount</span><b>− ${money(b.discount)}</b></div><div><span>Tax (${Number(b.tax_rate)||0}%)</span><b>${money(b.tax_amount)}</b></div><div class="grand"><span>Grand Total</span><span>${money(total)}</span></div><div><span>Paid</span><b>${money(paid)}</b></div><div><span>Balance Due</span><b>${money(Math.max(0,total-paid))}</b></div></div>
+      ${b.notes?`<p style="margin-top:22px"><b>Notes:</b> ${escapeHtml(b.notes)}</p>`:''}
+      <div class="print-footer"><span>${escapeHtml(p.footer||'Thank you for your business.')}</span><span>Authorized signature: __________________</span></div>`;
+  }
+  function switchTab(id){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===id));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('hidden',p.id!==id));
+    if(id==='history')renderHistory();
+  }
+  $('connectBtn').addEventListener('click',connect);
+  $('showInstructionsBtn').addEventListener('click',()=>$('instructions').classList.toggle('hidden'));
+  $('settingsBtn').addEventListener('click',()=>{const c=config();$('supabaseUrl').value=c.url;$('supabaseKey').value=c.key;$('setupPanel').classList.toggle('hidden');});
+  $('signUpBtn').addEventListener('click',signUp);$('signInBtn').addEventListener('click',signIn);$('logoutBtn').addEventListener('click',logout);
+  $('addItemBtn').addEventListener('click',()=>addItem());$('saveBillBtn').addEventListener('click',saveBill);$('clearBtn').addEventListener('click',resetForm);
+  ['discount','taxRate','paidAmount'].forEach(id=>$(id).addEventListener('input',calculate));
+  $('saveProfileBtn').addEventListener('click',saveProfile);$('profileShortcut').addEventListener('click',()=>switchTab('business'));
+  $('refreshBtn').addEventListener('click',()=>loadBills());['historySearch','fromDate','toDate'].forEach(id=>$(id).addEventListener('input',renderHistory));
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+  const c=config();$('supabaseUrl').value=c.url;$('supabaseKey').value=c.key;$('billDate').value=today();
+  ['discount','taxRate','paidAmount'].forEach(id=>$(id).addEventListener('change',calculate));
+  if(initClient()){
+    setConnection('Checking cloud…');
+    supabase.auth.getSession().then(({data,error})=>{if(error){showSetup();setText('setupMessage',error.message);return;}if(data.session)onSession(data.session);else showAuth();});
+    supabase.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_IN'&&session)onSession(session);if(event==='SIGNED_OUT'){currentUser=null;showAuth();}});
+    $('setupPanel').classList.add('hidden');
+  }else{showSetup();}
+  addItem();
+})();
+</script>
+</body>
+</html>
